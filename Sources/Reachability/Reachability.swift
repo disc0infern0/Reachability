@@ -8,7 +8,7 @@ import Foundation
 ///     maintains no state
 ///     performs no I/O whatsoever, leaving that to caller
 ///     defines two versions of checkReachable that takes either a URL or a urlString
-struct Reachable  {
+public struct Reachability  {
 
     /// Public API to check if a URL  is reachable.
     /// - Parameters:
