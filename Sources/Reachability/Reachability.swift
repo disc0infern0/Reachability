@@ -37,6 +37,8 @@ public struct Reachability  {
         return  try await reachable(url: url, verbose: verbose, bytes: bytes, timeout: timeout)
     }
 
+    public init() {}
+
     /// Validate the input URL string and creates a URL.
     /// It adds https:// if missing scheme, enforces http or https scheme, validates bytes and timeout arguments
     /// Throws ReachabilityError on any validation failure.
@@ -214,15 +216,17 @@ public struct Reachability  {
             throw URLError(.unknown)
         }
 
-        @MainActor
+        nonisolated
         func legacy() async throws  -> URLResponse? {
             var legacyError: Error? = nil
             var response: URLResponse?
             await dataTaskCompat2(session: session, request: request) { result in
-                switch result {
-                    case .success(let r): response = r
-                    case .failure(let err): legacyError = err
-                }
+//                DispatchQueue.main.async {
+                    switch result {
+                        case .success(let r): response = r
+                        case .failure(let err): legacyError = err
+                    }
+//                }
             }
             if let legacyError { throw legacyError }
             return response
@@ -247,17 +251,18 @@ public struct Reachability  {
         }
     }
 
+    typealias CompletionHandler = (Result<URLResponse, URLError>) -> Void
 
     /// Compatibility for old OS with no Swift Concurrency features at all.
     ///  Call the completion handler within DispatchQueue.main to maintain isolation
+    nonisolated //(nonsending)
     private func dataTaskCompat2(
         session: URLSession,
         request: URLRequest,
-        completion: @MainActor @escaping (Result<URLResponse, URLError>)  -> Void
+        completion: @escaping CompletionHandler
     ) async  {
 
         let task = session.dataTask(with: request)  { _, response, error in
-            DispatchQueue.main.async {
                 if let error {
                     if let err = error as? URLError {
                         completion(.failure(err))
@@ -267,7 +272,6 @@ public struct Reachability  {
                 } else {
                     completion(.failure(URLError(.unknown)))
                 }
-            }
         }
         task.resume()
     }
