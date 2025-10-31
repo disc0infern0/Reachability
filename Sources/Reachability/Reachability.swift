@@ -195,15 +195,15 @@ public struct Reachability: Sendable  {
     private func collectResponse(session: URLSession, request: URLRequest) async throws (URLError) -> URLResponse {
         var response: URLResponse?
         do {
-            if #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *) {
-                (_, response) = try await session.data(for: request)
-            } else
-            if #available(iOS 13.0, macOS 10.15, tvOS 13.0, watchOS 6.0, *) {
-                response = try await dataTaskCompat(session: session, request: request)
-            } else {
+//            if #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *) {
+//                (_, response) = try await session.data(for: request)
+//            } else
+//            if #available(iOS 13.0, macOS 10.15, tvOS 13.0, watchOS 6.0, *) {
+//                response = try await dataTaskCompat(session: session, request: request)
+//            } else {
                 // Legacy separated out to run on MainActor
                 response = try await legacy()
-            }
+//            }
             guard let response else {
                 throw URLError(.unknown)
             }
@@ -216,17 +216,17 @@ public struct Reachability: Sendable  {
             throw URLError(.unknown)
         }
 
-        nonisolated
+        // Assumes settings set to default MainActor
         func legacy() async throws  -> URLResponse? {
             var legacyError: Error? = nil
             var response: URLResponse?
             await dataTaskCompat2(session: session, request: request) { result in
-//                DispatchQueue.main.async {
+                DispatchQueue.main.async {
                     switch result {
                         case .success(let r): response = r
                         case .failure(let err): legacyError = err
                     }
-//                }
+                }
             }
             if let legacyError { throw legacyError }
             return response
@@ -251,30 +251,27 @@ public struct Reachability: Sendable  {
         }
     }
 
-    typealias CompletionHandler = (Result<URLResponse, URLError>) -> Void
+    typealias CompletionHandler = @Sendable (Result<URLResponse, URLError>) -> Void
 
     /// Compatibility for old OS with no Swift Concurrency features at all.
     ///  Call the completion handler within DispatchQueue.main to maintain isolation
-    nonisolated //(nonsending)
     private func dataTaskCompat2(
         session: URLSession,
         request: URLRequest,
         completion: @escaping CompletionHandler
     ) async  {
-
         let task = session.dataTask(with: request)  { _, response, error in
-                if let error {
-                    if let err = error as? URLError {
-                        completion(.failure(err))
-                    } else { completion(.failure(URLError(.unknown)))}
-                } else if let response {
-                    completion(.success(response))
-                } else {
-                    completion(.failure(URLError(.unknown)))
-                }
+            if let error {
+                if let err = error as? URLError {
+                    completion(.failure(err))
+                } else { completion(.failure(URLError(.unknown)))}
+            } else if let response {
+                completion(.success(response))
+            } else {
+                completion(.failure(URLError(.unknown)))
+            }
         }
         task.resume()
     }
-
 }
 
