@@ -8,6 +8,7 @@ import Foundation
 ///     maintains no state
 ///     performs no I/O whatsoever, leaving that to caller
 ///     defines two versions of checkReachable that takes either a URL or a urlString
+@MainActor
 public struct Reachability: Sendable  {
 
     /// Public API to check if a URL  is reachable.
@@ -251,7 +252,7 @@ public struct Reachability: Sendable  {
         }
     }
 
-    typealias CompletionHandler = @Sendable (Result<URLResponse, URLError>) -> Void
+    typealias CompletionHandler = (Result<URLResponse, URLError>) -> Void
 
     /// Compatibility for old OS with no Swift Concurrency features at all.
     ///  Call the completion handler within DispatchQueue.main to maintain isolation
@@ -260,18 +261,30 @@ public struct Reachability: Sendable  {
         request: URLRequest,
         completion: @escaping CompletionHandler
     ) async  {
-        let task = session.dataTask(with: request)  { _, response, error in
-            if let error {
-                if let err = error as? URLError {
-                    completion(.failure(err))
-                } else { completion(.failure(URLError(.unknown)))}
-            } else if let response {
-                completion(.success(response))
-            } else {
-                completion(.failure(URLError(.unknown)))
-            }
-        }
+        let task = session.dataTask(with: request) {_,_,_ in }
+//        { _, response, error in
+//            /// This closure is marked @Sendable in the definition of dataTask(with: request)
+//            if let error {
+//                if let err = error as? URLError {
+//                    completion(.failure(err))
+//                } else { completion(.failure(URLError(.unknown)))}
+//            } else if let response {
+//                completion(.success(response))
+//            } else {
+//                completion(.failure(URLError(.unknown)))
+//            }
+//        }
         task.resume()
+        /// Bad juju here
+        while task.state != .completed, task.state != .canceling { sleep(1_000)}
+
+        if let e = task.error {
+            completion(.failure(e as! URLError))
+        } else if let r = task.response {
+            completion(.success(r))
+        } else {
+            completion(.failure(URLError(.unknown)))
+        }
     }
 }
 
