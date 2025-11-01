@@ -233,6 +233,7 @@ public struct Reachability: Sendable  {
             task.resume()
             while responder.isDone == false {
                 print (task.progress.fractionCompleted)
+                sleep(1000)
             }
             if let e = responder.urlError { throw e }
             if let r = responder.urlResponse {
