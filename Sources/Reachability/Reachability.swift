@@ -226,11 +226,12 @@ public struct Reachability: Sendable  {
                 /// This closure must be Sendable
                 switch result {
                     case .success(let response):
-                        DispatchQueue.main.async { LegacyResponse.shared.urlResponse = response }
+                        DispatchQueue.main.async { LegacyResponse.shared.setResponse( response ) }
                     case .failure(let error):
-                        DispatchQueue.main.async { LegacyResponse.shared.urlError = error }
+                        DispatchQueue.main.async { LegacyResponse.shared.setError( error ) }
                 }
             }
+            while !LegacyResponse.shared.isCompleted {}
             if let e = LegacyResponse.shared.urlError {
                 throw e
             }
@@ -288,10 +289,21 @@ public struct Reachability: Sendable  {
 final class LegacyResponse {
     var urlResponse: URLResponse?
     var urlError: URLError?
+    private var isDone: Bool = false
     static let shared = LegacyResponse()
     init() {}
     func reset() {
         urlResponse = nil
         urlError = nil
+        isDone = false
     }
+    func setResponse(_ response: URLResponse) {
+        urlResponse = response
+        isDone = true
+    }
+    func setError(_ error: URLError) {
+        urlError = error
+        isDone = true
+    }
+    var isCompleted: Bool { isDone }
 }
