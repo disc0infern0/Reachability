@@ -226,9 +226,13 @@ public struct Reachability: Sendable  {
                 DispatchQueue.main.async {
                     responder.urlResponse = response
                     responder.urlError = error as? URLError ?? URLError(.unknown)
+                    responder.isDone = true
                 }
             }
             task.resume()
+            while responder.isDone == false {
+                print (task.progress.fractionCompleted)
+            }
             if let e = responder.urlError { throw e }
             if let r = responder.urlResponse {
                 return r
@@ -265,5 +269,6 @@ public struct Reachability: Sendable  {
 final class LegacyResponse {
     var urlResponse: URLResponse?
     var urlError: URLError?
+    var isDone: Bool = false
     init() {}
 }
