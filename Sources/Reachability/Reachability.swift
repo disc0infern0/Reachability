@@ -203,7 +203,7 @@ public struct Reachability: Sendable  {
             //                response = try await dataTaskCompat(session: session, request: request)
             //            } else {
             // Legacy separated out to run on MainActor
-            response = try await legacy()
+            response = try legacy()
             //            }
             guard let response else {
                 throw URLError(.unknown)
@@ -219,10 +219,10 @@ public struct Reachability: Sendable  {
         }
 
         // Assumes settings set to default MainActor
-        func legacy() async throws  -> URLResponse? {
+        func legacy() throws  -> URLResponse? {
 
             LegacyResponse.shared.reset()
-            await Self.legacyGet(request: request) { result in
+            Self.legacyGet(request: request) { result in
                 /// This closure must be Sendable
                 switch result {
                     case .success(let response):
@@ -238,7 +238,6 @@ public struct Reachability: Sendable  {
             if let r = LegacyResponse.shared.urlResponse {
                 return r
             }
-            print("\(LegacyResponse.shared.urlResponse.debugDescription)  and \(LegacyResponse.shared.urlError.debugDescription)")
             print("isCompleted: \(LegacyResponse.shared.isCompleted)")
             print("unknown error :S ")
             throw URLError(.unknown)
@@ -246,7 +245,7 @@ public struct Reachability: Sendable  {
 
 
     }
-    static func legacyGet(request: URLRequest, completion: @Sendable @escaping (Result<URLResponse, URLError>) -> Void) async {
+    static func legacyGet(request: URLRequest, completion: @Sendable @escaping (Result<URLResponse, URLError>) -> Void) {
 
 
         // Create URL session data task
