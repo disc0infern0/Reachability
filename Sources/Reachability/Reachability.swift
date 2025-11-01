@@ -220,25 +220,25 @@ public struct Reachability: Sendable  {
 
         // Assumes settings set to default MainActor
         func legacy() throws  -> URLResponse? {
-
-            LegacyResponse.shared.reset()
+            let responder = LegacyResponse()
+            responder.reset()
             Self.legacyGet(request: request) { result in
                 /// This closure must be Sendable
                 switch result {
                     case .success(let response):
-                        DispatchQueue.main.async { LegacyResponse.shared.setResponse( response ) }
+                        DispatchQueue.main.async { responder.setResponse( response ) }
                     case .failure(let error):
-                        DispatchQueue.main.async { LegacyResponse.shared.setError( error ) }
+                        DispatchQueue.main.async { responder.setError( error ) }
                 }
             }
-            while !LegacyResponse.shared.isCompleted {}
-            if let e = LegacyResponse.shared.urlError {
+            while !responder.isCompleted {print("waiting to be done")}
+            if let e = responder.urlError {
                 throw e
             }
-            if let r = LegacyResponse.shared.urlResponse {
+            if let r = responder.urlResponse {
                 return r
             }
-            print("isCompleted: \(LegacyResponse.shared.isCompleted)")
+            print("isCompleted: \(responder.isCompleted)")
             print("unknown error :S ")
             throw URLError(.unknown)
         }
