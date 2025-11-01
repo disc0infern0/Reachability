@@ -214,6 +214,7 @@ public struct Reachability: Sendable  {
             throw urlError
         }
         catch {
+            print("unknown")
             throw URLError(.unknown)
         }
 
