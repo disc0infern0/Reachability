@@ -231,14 +231,16 @@ public struct Reachability: Sendable  {
                         DispatchQueue.main.async { responder.setError( error ) }
                 }
             }
-            while !responder.isCompleted {print("waiting to be done")}
+            sleep(1)
+
+            guard responder.isCompleted else { fatalError("Should have been completed") }
+
             if let e = responder.urlError {
                 throw e
             }
             if let r = responder.urlResponse {
                 return r
             }
-            print("isCompleted: \(responder.isCompleted)")
             print("unknown error :S ")
             throw URLError(.unknown)
         }
