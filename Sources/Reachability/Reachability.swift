@@ -238,6 +238,8 @@ public struct Reachability: Sendable  {
             if let r = LegacyResponse.shared.urlResponse {
                 return r
             }
+            print("\(LegacyResponse.shared.urlResponse.debugDescription)  and \(LegacyResponse.shared.urlError.debugDescription)")
+            print("isCompleted: \(LegacyResponse.shared.isCompleted)")
             print("unknown error :S ")
             throw URLError(.unknown)
         }
