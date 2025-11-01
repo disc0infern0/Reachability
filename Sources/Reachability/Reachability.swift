@@ -221,7 +221,8 @@ public struct Reachability: Sendable  {
         // Assumes settings set to default MainActor
         func legacy() async throws  -> URLResponse? {
 
-            Self.legacyGet(request: request) { result in
+            LegacyResponse.shared.reset()
+            await Self.legacyGet(request: request) { result in
                 /// This closure must be Sendable
                 switch result {
                     case .success(let response):
@@ -242,11 +243,11 @@ public struct Reachability: Sendable  {
 
 
     }
-    static func legacyGet(request: URLRequest, completion: @Sendable @escaping (Result<URLResponse, URLError>) -> Void) {
+    static func legacyGet(request: URLRequest, completion: @Sendable @escaping (Result<URLResponse, URLError>) -> Void) async {
 
 
         // Create URL session data task
-        URLSession.shared.dataTask(with: request) { _, response, error in
+        let task = URLSession.shared.dataTask(with: request) { _, response, error in
 
             if let error = error as? URLError {
                 completion(.failure(error))
@@ -259,7 +260,8 @@ public struct Reachability: Sendable  {
             }
             completion(.success(response))
 
-        }.resume()
+        }
+        task.resume()
     }
     /// Compatibility helper for platforms/OS versions where URLSession.data(for:) isn't available,
     /// but CheckedContinuations are supported to bridge the completion handler to async/await
@@ -288,4 +290,8 @@ final class LegacyResponse {
     var urlError: URLError?
     static let shared = LegacyResponse()
     init() {}
+    func reset() {
+        urlResponse = nil
+        urlError = nil
+    }
 }
