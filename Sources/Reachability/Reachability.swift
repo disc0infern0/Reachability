@@ -203,7 +203,7 @@ public struct Reachability: Sendable  {
             //                response = try await dataTaskCompat(session: session, request: request)
             //            } else {
             // Legacy separated out to run on MainActor
-            response = try legacy()
+            response = try legacy(request: request)
             //            }
             guard let response else {
                 throw URLError(.unknown)
@@ -218,55 +218,9 @@ public struct Reachability: Sendable  {
             throw URLError(.unknown)
         }
 
-        // Assumes settings set to default MainActor
-        func legacy() throws  -> URLResponse? {
-            let responder = LegacyResponse()
-            responder.reset()
-            Self.legacyGet(request: request) { result in
-                /// This closure must be Sendable
-                switch result {
-                    case .success(let response):
-                        DispatchQueue.main.async { responder.setResponse( response ) }
-                    case .failure(let error):
-                        DispatchQueue.main.async { responder.setError( error ) }
-                }
-            }
-            sleep(1)
-
-            guard responder.isCompleted else { fatalError("Should have been completed") }
-
-            if let e = responder.urlError {
-                throw e
-            }
-            if let r = responder.urlResponse {
-                return r
-            }
-            print("unknown error :S ")
-            throw URLError(.unknown)
-        }
-
 
     }
-    static func legacyGet(request: URLRequest, completion: @Sendable @escaping (Result<URLResponse, URLError>) -> Void) {
 
-
-        // Create URL session data task
-        let task = URLSession.shared.dataTask(with: request) { _, response, error in
-
-            if let error = error as? URLError {
-                completion(.failure(error))
-                return
-            }
-
-            guard let response = response else {
-                completion(.failure(URLError(.unknown)))
-                return
-            }
-            completion(.success(response))
-
-        }
-        task.resume()
-    }
     /// Compatibility helper for platforms/OS versions where URLSession.data(for:) isn't available,
     /// but CheckedContinuations are supported to bridge the completion handler to async/await
     @available(iOS 13.0, macOS 10.15, tvOS 13.0, watchOS 6.0, *)
@@ -285,15 +239,55 @@ public struct Reachability: Sendable  {
         }
     }
 
+    // Capture thrown errors within the completion handler into a Result object
+    // since the completion handler cannot throw.
+    // Store the result into a (unchecked) sendable dedicated class object that can be read outside of the
+    // handler.
+    // Assumes settings set to default MainActor
+    func legacy(request: URLRequest) throws  -> URLResponse? {
+        let responder = LegacyResponse()
+        responder.reset()
+        legacyGet(request: request) { result in
+            switch result {
+                case .success(let response):
+                    responder.setResponse( response )
+                case .failure(let error):
+                    responder.setError( error )
+            }
+        }
+        // Don't look at the next line. Bad juju lives here. (You should have upgraded your OS!)
+        while !responder.isCompleted { Thread.sleep(forTimeInterval: 0.0042)}
+
+        if let e = responder.urlError { throw e }
+        if let r = responder.urlResponse { return r }
+        throw URLError(.unknown)
+    }
+
+    func legacyGet(request: URLRequest, completion: @Sendable @escaping (Result<URLResponse, URLError>) -> Void) {
+        // Create URL session data task
+        let task = URLSession.shared.dataTask(with: request) { _, response, error in
+            if let error = error as? URLError {
+                completion(.failure(error))
+                return
+            }
+            guard let response else {
+                completion(.failure(URLError(.unknown)))
+                return
+            }
+            completion(.success(response))
+        }
+        task.resume()
+    }
 }
 
 
-@MainActor
-final class LegacyResponse {
-    var urlResponse: URLResponse?
-    var urlError: URLError?
+//********************************************
+nonisolated
+final class LegacyResponse: @unchecked Sendable {
+    private(set) var urlResponse: URLResponse?
+    private(set) var urlError: URLError?
     private var isDone: Bool = false
-    static let shared = LegacyResponse()
+
     init() {}
     func reset() {
         urlResponse = nil
