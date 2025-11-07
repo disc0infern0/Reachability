@@ -193,7 +193,7 @@ public struct Reachability: Sendable  {
 
 extension Double {
     /// String representation limited to two decimal places.
-    var decimalString: String {
+    public var decimalString: String {
         self.decimalString( decimalPlaces: 2)
     }
     /// String representation limited to the specified number of decimal places.
