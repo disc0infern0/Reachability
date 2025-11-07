@@ -20,8 +20,8 @@ public struct Reachability: Sendable  {
     /// - Throws: Throws on failure. The error.localizedDescription will contain details of why the failure occurred.
     /// - Returns: String "success" or verbose message.
 
-    public func checkReachable(_ url: URL, verbose: Bool = false, bytes: Int = 64, timeout: Double = 2.5) async throws -> String {
-        try await reachable(url: url, verbose: verbose, bytes: bytes, timeout: timeout)
+    public func checkReachable(_ url: URL, verbose: Bool = false, bytes: Int = 64, timeout: Double = 2.5) async  -> ReachableResult {
+        await reachable(url: url, verbose: verbose, bytes: bytes, timeout: timeout)
     }
 
     /// Public API to check if a URL  is reachable.
@@ -32,10 +32,22 @@ public struct Reachability: Sendable  {
     ///   - timeout: Timeout for the request in seconds (default 2.5).
     /// - Throws: Throws on failure. The error.localizedDescription will contain details of why the failure occurred.
     /// - Returns: String "success" or verbose message.
-    public func checkReachable(_ urlString: String, verbose: Bool = false, bytes: Int = 64, timeout: Double = 2.5) async throws -> String {
-        var urlString = urlString
-        let url = try makeURL(&urlString, bytes: bytes, timeout: timeout)
-        return  try await reachable(url: url, verbose: verbose, bytes: bytes, timeout: timeout)
+    public func checkReachable(_ urlString: String, verbose: Bool = false, bytes: Int = 64, timeout: Double = 2.5) async -> ReachableResult {
+        do {
+            var urlString = urlString
+            let url = try makeURL(&urlString, bytes: bytes, timeout: timeout)
+            return  await reachable(url: url, verbose: verbose, bytes: bytes, timeout: timeout)
+        } catch {
+            return ReachableResult(reachable: false, description: error.localizedDescription, responseTime: nil, finalURL: nil, responseCode: nil)
+        }
+    }
+
+    public struct ReachableResult: Equatable, Sendable, CustomStringConvertible {
+        public let reachable: Bool
+        public let description: String
+        public let responseTime: Double?
+        public let finalURL: String?
+        public let responseCode: Int?
     }
 
     public init() {}
@@ -79,56 +91,49 @@ public struct Reachability: Sendable  {
         return url
     }
 
-    func reachable(url: URL, verbose: Bool = false, bytes: Int = 64, timeout: Double = 2.5) async throws -> String {
-        var isReachable = false
-
+    func reachable(url: URL, verbose: Bool = false, bytes: Int = 64, timeout: Double = 2.5) async -> ReachableResult {
         let startTime = DispatchTime.now()
+        do {
+            var isReachable = false
 
-        /// Get httpResponse to a HEAD  method first
-        var httpMethod = "HEAD"
-        var response = try await getResponse(from: url, httpMethod: httpMethod, verbose: verbose, bytes: bytes, timeout: timeout)
-        if (200...299).contains(response.code) || [401, 403].contains(response.code) {
-            isReachable = true
-        }
-
-        // Fallback: some servers don't support HEAD; retry with GET on 405/501
-        if !isReachable && [405, 501].contains(response.code) {
-            httpMethod = "GET"
-            response = try await getResponse(from: url, httpMethod: httpMethod, verbose: verbose, bytes: bytes, timeout: timeout)
+            /// Get httpResponse to a HEAD  method first
+            var httpMethod = "HEAD"
+            var response = try await getResponse(from: url, httpMethod: httpMethod, verbose: verbose, bytes: bytes, timeout: timeout)
             if (200...299).contains(response.code) || [401, 403].contains(response.code) {
                 isReachable = true
             }
-        }
 
-        if isReachable {
-            return verbose ? response.message + " in \(elapsedMS(since: startTime))ms" : response.message
+            // Fallback: some servers don't support HEAD; retry with GET on 405/501
+            if !isReachable && [405, 501].contains(response.code) {
+                httpMethod = "GET"
+                response = try await getResponse(from: url, httpMethod: httpMethod, verbose: verbose, bytes: bytes, timeout: timeout)
+                if (200...299).contains(response.code) || [401, 403].contains(response.code) {
+                    isReachable = true
+                }
+            }
+
+            let elapsed = elapsedMS(since: startTime)
+            var description = isReachable ? "success" : "failed"
+            if verbose {
+                description += "\n\(response.code) received from \(response.httpMethod) request to \(response.finalURL)"
+                description += "\nTime taken: \(elapsed.decimalString)ms\n"
+            }
+            return ReachableResult(reachable: isReachable, description: description, responseTime: elapsed, finalURL: response.finalURL, responseCode: response.code)
         }
-        var message = "failed. Received \(response.code) from \(response.finalURL)"
-        if verbose {
-            message += " in \(elapsedMS(since: startTime))ms"
+        catch {
+            return ReachableResult(reachable: false, description: error.localizedDescription, responseTime: elapsedMS(since: startTime), finalURL: nil, responseCode: nil)
         }
-        throw ReachabilityError.unreachable(message)
     }
 
-    /// Use NumberFormatter to create %.2f format, instead of the String(format: ) function, which is apparently "unsafe" as of Swift 6.2
-    func elapsedMS(since startTime: DispatchTime) -> String {
-        let now = DispatchTime.now()
-        let elapsedMS =  Double(now.uptimeNanoseconds - startTime.uptimeNanoseconds) / 1_000_000.0
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.maximumFractionDigits = 2
-        return formatter.string(from: NSNumber(value: elapsedMS)) ?? "0.00"
+    /// convert from Time Interval to Double
+    func elapsedMS(since startTime: DispatchTime) -> Double {
+        Double(DispatchTime.now().uptimeNanoseconds - startTime.uptimeNanoseconds) / 1_000_000.0
     }
 
     struct Response {
         let code: Int       // code to indicate success or varying degrees of failure
-        let message: String // Messages to be passed back to the caller
+        let httpMethod: String // Head or Get
         let finalURL: String // The final URL after redirects
-        init(_ code: Int, _ message: String = "", finalURL: String) {
-            self.code = code
-            self.message = message
-            self.finalURL = finalURL
-        }
     }
 
     /// getResponse
@@ -181,13 +186,22 @@ public struct Reachability: Sendable  {
             throw ReachabilityError.unexpected
         }
         let finalUrlString = httpResponse.url?.absoluteString ?? url.absoluteString
-        let message: String
-        if verbose {
-            message = "\(httpMethod) request to \(finalUrlString) received a \(httpResponse.statusCode) response"
-        } else {
-            message = "success"
-        }
-        return Response(httpResponse.statusCode, message, finalURL: finalUrlString)
+        return Response(code: httpResponse.statusCode, httpMethod: httpMethod, finalURL: finalUrlString)
     }
 
+}
+
+extension Double {
+    /// String representation limited to two decimal places.
+    var decimalString: String {
+        self.decimalString( decimalPlaces: 2)
+    }
+    /// String representation limited to the specified number of decimal places.
+    func decimalString(decimalPlaces: Int = 2) -> String {
+        /// Use NumberFormatter to create %.2f format, instead of the String(format: ) function, which is apparently "unsafe" as of Swift 6.2
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = decimalPlaces
+        return formatter.string(from: NSNumber(value: self)) ?? "0.\(String(repeating: "0", count: decimalPlaces))"
+    }
 }
