@@ -42,7 +42,7 @@ public struct Reachability: Sendable  {
         }
     }
 
-    public struct ReachableResult: Equatable, Sendable, CustomStringConvertible {
+    public nonisolated struct ReachableResult: Equatable, Sendable, CustomStringConvertible {
         public let reachable: Bool
         public let description: String
         public let responseTime: Double?
