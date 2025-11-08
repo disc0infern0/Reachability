@@ -38,7 +38,7 @@ public struct Reachability: Sendable  {
             let url = try makeURL(&urlString, bytes: bytes, timeout: timeout)
             return  await reachable(url: url, verbose: verbose, bytes: bytes, timeout: timeout)
         } catch {
-            return ReachableResult(reachable: false, description: error.localizedDescription, responseTime: nil, finalURL: nil, responseCode: nil, size: -1)
+            return ReachableResult(reachable: false, description: error.localizedDescription, responseTime: nil, finalURL: nil, responseCode: nil, size: -1, httpMethod: "")
         }
     }
 
@@ -49,6 +49,7 @@ public struct Reachability: Sendable  {
         public let finalURL: String?
         public let responseCode: Int?
         public let size: Int
+        public let httpMethod: String // Head or Get
     }
 
     public init() {}
@@ -119,10 +120,11 @@ public struct Reachability: Sendable  {
                 description += "\n\(response.code) received from \(response.httpMethod) request to \(response.finalURL)"
                 description += "\nTime taken: \(elapsed.decimalString)ms\n"
             }
-            return ReachableResult(reachable: isReachable, description: description, responseTime: elapsed, finalURL: response.finalURL, responseCode: response.code, size: response.size)
+            return ReachableResult(reachable: isReachable, description: description, responseTime: elapsed,
+                                   finalURL: response.finalURL, responseCode: response.code, size: response.size,  httpMethod: response.httpMethod)
         }
         catch {
-            return ReachableResult(reachable: false, description: error.localizedDescription, responseTime: elapsedMS(since: startTime), finalURL: nil, responseCode: nil, size: -1)
+            return ReachableResult(reachable: false, description: error.localizedDescription, responseTime: elapsedMS(since: startTime), finalURL: nil, responseCode: nil, size: -1, httpMethod: "")
         }
     }
 
