@@ -38,7 +38,7 @@ public struct Reachability: Sendable  {
             let url = try makeURL(&urlString, bytes: bytes, timeout: timeout)
             return  await reachable(url: url, verbose: verbose, bytes: bytes, timeout: timeout)
         } catch {
-            return ReachableResult(reachable: false, description: error.localizedDescription, responseTime: nil, finalURL: nil, responseCode: nil)
+            return ReachableResult(reachable: false, description: error.localizedDescription, responseTime: nil, finalURL: nil, responseCode: nil, size: -1)
         }
     }
 
@@ -48,6 +48,7 @@ public struct Reachability: Sendable  {
         public let responseTime: Double?
         public let finalURL: String?
         public let responseCode: Int?
+        public let size: Int
     }
 
     public init() {}
@@ -118,10 +119,10 @@ public struct Reachability: Sendable  {
                 description += "\n\(response.code) received from \(response.httpMethod) request to \(response.finalURL)"
                 description += "\nTime taken: \(elapsed.decimalString)ms\n"
             }
-            return ReachableResult(reachable: isReachable, description: description, responseTime: elapsed, finalURL: response.finalURL, responseCode: response.code)
+            return ReachableResult(reachable: isReachable, description: description, responseTime: elapsed, finalURL: response.finalURL, responseCode: response.code, size: response.size)
         }
         catch {
-            return ReachableResult(reachable: false, description: error.localizedDescription, responseTime: elapsedMS(since: startTime), finalURL: nil, responseCode: nil)
+            return ReachableResult(reachable: false, description: error.localizedDescription, responseTime: elapsedMS(since: startTime), finalURL: nil, responseCode: nil, size: -1)
         }
     }
 
@@ -134,6 +135,7 @@ public struct Reachability: Sendable  {
         let code: Int       // code to indicate success or varying degrees of failure
         let httpMethod: String // Head or Get
         let finalURL: String // The final URL after redirects
+        let size: Int // The expected content length reported by the response
     }
 
     /// getResponse
@@ -185,23 +187,8 @@ public struct Reachability: Sendable  {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw ReachabilityError.unexpected
         }
+        let sizeOfResponseBody: Int = Int(httpResponse.allHeaderFields["Content-Length"] as? String ?? "0") ?? 0
         let finalUrlString = httpResponse.url?.absoluteString ?? url.absoluteString
-        return Response(code: httpResponse.statusCode, httpMethod: httpMethod, finalURL: finalUrlString)
-    }
-
-}
-
-extension Double {
-    /// String representation limited to two decimal places.
-    public var decimalString: String {
-        self.decimalString( decimalPlaces: 2)
-    }
-    /// String representation limited to the specified number of decimal places.
-    func decimalString(decimalPlaces: Int = 2) -> String {
-        /// Use NumberFormatter to create %.2f format, instead of the String(format: ) function, which is apparently "unsafe" as of Swift 6.2
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.maximumFractionDigits = decimalPlaces
-        return formatter.string(from: NSNumber(value: self)) ?? "0.\(String(repeating: "0", count: decimalPlaces))"
+        return Response(code: httpResponse.statusCode, httpMethod: httpMethod, finalURL: finalUrlString, size: sizeOfResponseBody)
     }
 }
