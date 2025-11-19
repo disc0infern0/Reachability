@@ -19,6 +19,11 @@ let package = Package(
             name: "Reachability",
             swiftSettings: [
                 .defaultIsolation(MainActor.self), // set Default Actor Isolation
+                .enableUpcomingFeature("DisableOutwardActorInference"),
+                .enableUpcomingFeature("GlobalActorIsolatedTypesUsability"),
+                .enableUpcomingFeature("InferIsolatedConformances"),
+                .enableUpcomingFeature("InferSendableFromCaptures"),
+                .enableUpcomingFeature("NonisolatedNonsendingByDefault")
             ]
         ),
 
